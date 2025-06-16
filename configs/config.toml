@@ -17,6 +17,8 @@ password = ""
 db = 0
 
 [authCodeConfig]
+accessKeyID = "your accessKeyID in alibaba cloud"
+accessKeySecret = "your accessKeySecret in alibaba cloud"
 signName = "阿里云短信测试"
 templateCode = "SMS_154950909"
 
