@@ -242,7 +242,7 @@ export default {
       } catch (error) {
         console.log(error);
       }
-      router.go(0);
+      // router.go(0);
     };
     const quitMyInfoModal = () => {
       data.isMyInfoModalVisible = false;

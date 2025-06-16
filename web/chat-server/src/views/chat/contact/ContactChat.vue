@@ -928,6 +928,7 @@
                 maxlength="500"
                 :autosize="{ minRows: 7.9, maxRows: 7 }"
                 placeholder="请输入内容"
+                @keydown.enter.prevent="sendMessage"
               />
             </div>
             <div class="chat-send">
@@ -1038,7 +1039,15 @@ export default {
       isAVContainerModalVisible: false,
       videoPlayer: null,
       rtcPeerConn: null,
-      ICE_CFG: {},
+      ICE_CFG: {
+        iceServers: [
+          {
+            urls: "turn:114.55.58.3:3478",
+            username: "shx",
+            credential: "123456",
+          },
+        ],
+      },
       localStream: null,
       remoteStream: null,
       remoteVideo: null,
