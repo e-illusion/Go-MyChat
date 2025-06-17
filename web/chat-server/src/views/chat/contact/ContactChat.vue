@@ -1067,78 +1067,96 @@ export default {
       }
       console.log(data.sessionId);
       store.state.socket.onmessage = (jsonMessage) => {
-        const message = JSON.parse(jsonMessage.data);
-        if (message.type != 3) {
-          if (
-            // 群聊过来的消息，且当前会话是该群聊
-            (message.receive_id[0] == "G" &&
-              message.receive_id == data.contactInfo.contact_id) ||
-            // 其他用户过来的消息，且当前会话是该用户
-            (message.receive_id[0] == "U" &&
-              message.receive_id == data.userInfo.uuid) ||
-            // 自己发送的消息
-            message.send_id == data.userInfo.uuid
-          ) {
-            console.log("收到消息：", message);
-            if (data.messageList == null) {
-              data.messageList = [];
-            }
-            data.messageList.push(message);
-            scrollToBottom();
-          }
-          // 其他接受的消息都不显示在messageList中，而是通过切换页面或刷新页面getMessageList来获取
-        } else {
-          var messageAVdata = JSON.parse(message.av_data); // 后端message的该字段命名为av_data
-          if (messageAVdata.messageId === "CURRENT_PEERS") {
-            console.log(
-              "获取CURRENT_PEERS当前在线用户列表，curContactList:",
-              messageAVdata.messageData.curContactList
-            );
-            data.curContactList = messageAVdata.messageData.curContactList;
-          } else if (messageAVdata.messageId === "PEER_JOIN") {
-            console.log(
-              "接受到PEER_JOIN消息，contactId:",
-              messageAVdata.messagecontactId
-            );
-            data.curContactList.push(messageAVdata.messagecontactId);
-          } else if (messageAVdata.messageId === "PEER_LEAVE") {
-            console.log("接收到PEER_LEAVE消息：", data.userInfo.uuid);
-            receiveEndCall();
-          } else if (messageAVdata.messageId === "PROXY") {
-            console.log("接收到PROXY消息：", message);
-            if (messageAVdata.type === "start_call") {
-              ElNotification({
-                title: "消息提示",
-                message: `收到一条来自${message.send_name}的通话请求，请及时前往查看`,
-                type: "warning",
-              });
-              data.ableToReceiveOrRejectCall = true;
-              data.ableToStartCall = false;
-            } else if (messageAVdata.type === "receive_call") {
-              createOffer();
-            } else if (messageAVdata.type === "reject_call") {
-              endCall();
-            } else if (messageAVdata.type === "sdp") {
-              if (messageAVdata.messageData.sdp.type === "offer") {
-                handleOfferSdp(messageAVdata.messageData.sdp);
-              } else if (messageAVdata.messageData.sdp.type === "answer") {
-                handleAnswerSdp(messageAVdata.messageData.sdp);
-              } else {
-                console.log("不支持的sdp类型");
-              }
-            } else if (messageAVdata.type === "candidate") {
-              handleCandidate(messageAVdata.messageData.candidate);
-            } else {
-              console.log("不支持的proxy类型");
-            }
-          }
-          console.log("收到消息：", message);
-          if (data.messageList == null) {
-            data.messageList = [];
-          }
-          data.messageList.push(message);
-          scrollToBottom();
-        }
+	const message = JSON.parse(jsonMessage.data);
+	const me = data.userInfo.uuid;
+	const currentContactId = data.contactInfo.contact_id;
+
+	// 首先判断消息是否是给音视频通话的信令，它们不应该被显示在聊天记录里
+	if (message.type === 3) {
+	  console.log("收到AV信令消息:", message);
+	  // 在这里处理音视频通话逻辑... (这部分代码保持原样)
+	  var messageAVdata = JSON.parse(message.av_data);
+	  if (messageAVdata.messageId === "CURRENT_PEERS") {
+	      console.log(
+		"获取CURRENT_PEERS当前在线用户列表，curContactList:",
+		messageAVdata.messageData.curContactList
+	      );
+	      data.curContactList = messageAVdata.messageData.curContactList;
+	    } else if (messageAVdata.messageId === "PEER_JOIN") {
+	      console.log(
+		"接受到PEER_JOIN消息，contactId:",
+		messageAVdata.messagecontactId
+	      );
+	      data.curContactList.push(messageAVdata.messagecontactId);
+	    } else if (messageAVdata.messageId === "PEER_LEAVE") {
+	      console.log("接收到PEER_LEAVE消息：", data.userInfo.uuid);
+	      receiveEndCall();
+	    } else if (messageAVdata.messageId === "PROXY") {
+	      console.log("接收到PROXY消息：", message);
+	      if (messageAVdata.type === "start_call") {
+		ElNotification({
+		  title: "消息提示",
+		  message: `收到一条来自${message.send_name}的通话请求，请及时前往查看`,
+		  type: "warning",
+		});
+		data.ableToReceiveOrRejectCall = true;
+		data.ableToStartCall = false;
+	      } else if (messageAVdata.type === "receive_call") {
+		createOffer();
+	      } else if (messageAVdata.type === "reject_call") {
+		endCall();
+	      } else if (messageAVdata.type === "sdp") {
+		if (messageAVdata.messageData.sdp.type === "offer") {
+		  handleOfferSdp(messageAVdata.messageData.sdp);
+		} else if (messageAVdata.messageData.sdp.type === "answer") {
+		  handleAnswerSdp(messageAVdata.messageData.sdp);
+		} else {
+		  console.log("不支持的sdp类型");
+		}
+	      } else if (messageAVdata.type === "candidate") {
+		handleCandidate(messageAVdata.messageData.candidate);
+	      } else {
+		console.log("不支持的proxy类型");
+	      }
+	    }
+	  // 注意：这里不再有 `data.messageList.push(message)`
+	  return; // 信令处理完毕，直接返回
+	}
+
+	// --- 以下是处理普通聊天消息的逻辑 ---
+
+	let isForCurrentChat = false;
+
+	// 判断当前是否是群聊
+	if (currentContactId.startsWith("G")) {
+	  // 如果是群聊，只要接收ID是当前群聊ID，就属于当前会话
+	  if (message.receive_id === currentContactId) {
+	    isForCurrentChat = true;
+	  }
+	} else {
+	  // 如果是私聊，必须是“我发给对方”或“对方发给我”
+	  if (
+	    (message.send_id === me && message.receive_id === currentContactId) ||
+	    (message.send_id === currentContactId && message.receive_id === me)
+	  ) {
+	    isForCurrentChat = true;
+	  }
+	}
+
+	if (isForCurrentChat) {
+	  console.log("收到当前会话的消息:", message);
+	  if (data.messageList == null) {
+	    data.messageList = [];
+	  }
+	  data.messageList.push(message);
+	  scrollToBottom();
+	} else {
+	  // 消息不是发给当前会话的，我们可以在这里加一个未读消息的提示
+	  // 比如，让对应的联系人头像上出现一个小红点 (这是未来的优化方向)
+	  console.log("收到其他会话的消息，不在此显示:", message);
+	  // 这里可以触发一个全局事件或Vuex action来更新未读计数
+	  store.commit("addUnreadMessage", message.send_id);
+	}
       };
       scrollToBottom();
       next();
